@@ -1,0 +1,46 @@
+name: Daily Job Scraper
+
+on:
+  schedule:
+    # This runs at 00:00, 06:00, 12:00, and 18:00 UTC every day
+    - cron: '0 */6 * * *' 
+  # This allows you to manually click "Run workflow" in the Actions tab to test it
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Pulls the code from your repository into the runner
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2. Sets up a Python 3.9 environment
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      # 3. Installs the libraries listed in your requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # 4. Runs your scraper using the Secrets you saved in GitHub Settings
+      - name: Run Scraper
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+        run: python scraper.py
+
+      # 5. Saves the 'jobs_seen.txt' file back to your repo so it remembers old jobs
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name 'GitHub Action Bot'
+          git config --global user.email 'actions@github.com'
+          git add jobs_seen.txt
+          # The '|| exit 0' prevents the workflow from failing if there are no new jobs to save
+          git commit -m "Update seen jobs cache" || exit 0
+          git push
