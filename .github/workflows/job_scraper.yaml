@@ -2,45 +2,52 @@ name: Daily Job Scraper
 
 on:
   schedule:
-    # This runs at 00:00, 06:00, 12:00, and 18:00 UTC every day
-    - cron: '0 */6 * * *' 
-  # This allows you to manually click "Run workflow" in the Actions tab to test it
+    # 4x daily at 13:00, 17:00, 21:00, 01:00 UTC
+    # (≈ 6 AM / 10 AM / 2 PM / 6 PM US Pacific).
+    - cron: "0 1,13,17,21 * * *"
   workflow_dispatch:
 
+# The job commits the updated jobs_seen.json cache back to the repo.
+permissions:
+  contents: write
+
+concurrency:
+  group: job-scraper
+  cancel-in-progress: false
+
 jobs:
-  build:
+  scrape:
     runs-on: ubuntu-latest
-
     steps:
-      # 1. Pulls the code from your repository into the runner
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # 2. Sets up a Python 3.9 environment
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: "3.11"
+          cache: pip
 
-      # 3. Installs the libraries listed in your requirements.txt
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 4. Runs your scraper using the Secrets you saved in GitHub Settings
-      - name: Run Scraper
+      - name: Run scraper
         env:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          EMAIL_TO:   ${{ secrets.EMAIL_TO }}
         run: python scraper.py
 
-      # 5. Saves the 'jobs_seen.txt' file back to your repo so it remembers old jobs
-      - name: Commit and Push changes
+      - name: Commit updated cache
         run: |
-          git config --global user.name 'GitHub Action Bot'
-          git config --global user.email 'actions@github.com'
-          git add jobs_seen.txt
-          # The '|| exit 0' prevents the workflow from failing if there are no new jobs to save
-          git commit -m "Update seen jobs cache" || exit 0
-          git push
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ -n "$(git status --porcelain jobs_seen.json)" ]]; then
+            git add jobs_seen.json
+            git commit -m "chore: update jobs_seen cache [skip ci]"
+            git push
+          else
+            echo "No cache changes to commit."
+          fi
